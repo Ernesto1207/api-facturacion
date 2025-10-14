@@ -178,13 +178,13 @@ class AuthController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => ['required', Password::min(8)],
-            'role_name' => 'required|string|exists:roles,name',
+            'role_name' => 'required|string|exists:roles,display_name',
             'company_id' => 'nullable|integer|exists:companies,id',
             'user_type' => 'required|in:system,user,api_client',
         ]);
 
         try {
-            $role = Role::where('name', $request->role_name)->first();
+            $role = Role::where('display_name', $request->role_name)->first();
 
             $user = User::create([
                 'name' => $request->name,
@@ -223,7 +223,7 @@ class AuthController extends Controller
     {
         // Instanciar el seeder y ejecutarlo directamente sin setCommand
         $seeder = new RolesAndPermissionsSeeder();
-        
+
         // Ejecutar solo la creación de permisos y roles, no usuarios por defecto
         $seeder->runPermissionsAndRolesOnly();
     }
