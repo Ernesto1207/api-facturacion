@@ -62,8 +62,5 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 # Exponer el puerto 8000.
 EXPOSE 8000
 
-# Definir el punto de entrada.
-ENTRYPOINT ["docker-entrypoint.sh"]
-
 # Comando por defecto.
 CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
