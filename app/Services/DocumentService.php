@@ -39,28 +39,28 @@ class DocumentService
             $branch = Branch::where('company_id', $company->id)
                            ->where('id', $data['branch_id'])
                            ->firstOrFail();
-            
+
             // Crear o buscar cliente
             $client = $this->getOrCreateClient($data['client']);
-            
+
             // Obtener siguiente correlativo
             $serie = $data['serie'];
             $correlativo = $branch->getNextCorrelative('01', $serie);
-            
+
             // Preparar datos globales para cálculos
             $globalData = [
                 'descuentos' => $data['descuentos'] ?? [],
                 'anticipos' => $data['anticipos'] ?? [],
                 'redondeo' => $data['redondeo'] ?? 0,
             ];
-            
+
             // Procesar detalles según tipo de operación antes de calcular totales
             $tipoOperacion = $data['tipo_operacion'] ?? '0101';
             $this->processDetailsForOperationType($data['detalles'], $tipoOperacion);
-            
+
             // Calcular totales automáticamente
             $totals = $this->calculateTotals($data['detalles'], $globalData);
-            
+
             // Crear factura
             $invoice = Invoice::create([
                 'company_id' => $company->id,
@@ -121,24 +121,24 @@ class DocumentService
             $branch = Branch::where('company_id', $company->id)
                            ->where('id', $data['branch_id'])
                            ->firstOrFail();
-            
+
             // Crear o buscar cliente
             $client = $this->getOrCreateClient($data['client']);
-            
+
             // Obtener siguiente correlativo
             $serie = $data['serie'];
             $correlativo = $branch->getNextCorrelative('03', $serie);
-            
+
             // Preparar datos globales para cálculos
             $globalData = [
                 'descuentos' => $data['descuentos'] ?? [],
                 'anticipos' => $data['anticipos'] ?? [],
                 'redondeo' => $data['redondeo'] ?? 0,
             ];
-            
+
             // Calcular totales automáticamente (esto modifica $data['detalles'] por referencia)
             $totals = $this->calculateTotals($data['detalles'], $globalData);
-            
+
             // Crear boleta
             $boleta = Boleta::create([
                 'company_id' => $company->id,
@@ -182,10 +182,10 @@ class DocumentService
         try {
             $company = $document->company;
             $greenterService = new GreenterService($company);
-            
+
             // Preparar datos para Greenter
             $documentData = $this->prepareDocumentData($document, $documentType);
-            
+
             // Crear documento Greenter
             $greenterDocument = null;
             switch ($documentType) {
@@ -200,24 +200,24 @@ class DocumentService
                     $greenterDocument = $greenterService->createNote($documentData);
                     break;
             }
-            
+
             if (!$greenterDocument) {
                 throw new Exception('No se pudo crear el documento para Greenter');
             }
-            
+
             // Enviar a SUNAT
             $result = $greenterService->sendDocument($greenterDocument);
-            
+
             // Guardar archivos
             if ($result['xml']) {
                 $xmlPath = $this->fileService->saveXml($document, $result['xml']);
                 $document->xml_path = $xmlPath;
             }
-            
+
             if ($result['success'] && $result['cdr_zip']) {
                 $cdrPath = $this->fileService->saveCdr($document, $result['cdr_zip']);
                 $document->cdr_path = $cdrPath;
-                
+
                 $document->estado_sunat = 'ACEPTADO';
                 $document->respuesta_sunat = json_encode([
                     'id' => $result['cdr_response']->getId(),
@@ -225,7 +225,7 @@ class DocumentService
                     'description' => $result['cdr_response']->getDescription(),
                     'notes' => $result['cdr_response']->getNotes(),
                 ]);
-                
+
                 // Obtener hash del XML
                 $xmlSigned = $greenterService->getXmlSigned($greenterDocument);
                 if ($xmlSigned) {
@@ -233,39 +233,39 @@ class DocumentService
                 }
             } else {
                 $document->estado_sunat = 'RECHAZADO';
-                
+
                 // Manejar diferentes tipos de error
                 $errorCode = 'UNKNOWN';
                 $errorMessage = 'Error desconocido';
-                
+
                 if (is_object($result['error'])) {
                     if (method_exists($result['error'], 'getCode')) {
                         $errorCode = $result['error']->getCode();
                     } elseif (property_exists($result['error'], 'code')) {
                         $errorCode = $result['error']->code;
                     }
-                    
+
                     if (method_exists($result['error'], 'getMessage')) {
                         $errorMessage = $result['error']->getMessage();
                     } elseif (property_exists($result['error'], 'message')) {
                         $errorMessage = $result['error']->message;
                     }
                 }
-                
+
                 $document->respuesta_sunat = json_encode([
                     'code' => $errorCode,
                     'message' => $errorMessage,
                 ]);
             }
-            
+
             $document->save();
-            
+
             return [
                 'success' => $result['success'],
                 'document' => $document,
                 'error' => $result['success'] ? null : $result['error']
             ];
-            
+
         } catch (Exception $e) {
             return [
                 'success' => false,
@@ -518,14 +518,14 @@ class DocumentService
     protected function generateLegends(float $total, string $moneda, array $data = []): array
     {
         $leyendas = [];
-        
+
         // Leyenda 1000: Monto en letras
         $numeroALetras = $this->convertNumberToWords($total, $moneda);
         $leyendas[] = [
             'code' => '1000',
             'value' => $numeroALetras
         ];
-        
+
         // Leyenda 1002: Transferencias gratuitas
         if (isset($data['detalles']) && $this->hasGratuitasItems($data['detalles'])) {
             $leyendas[] = [
@@ -533,7 +533,7 @@ class DocumentService
                 'value' => 'TRANSFERENCIA GRATUITA DE UN BIEN Y/O SERVICIO PRESTADO GRATUITAMENTE'
             ];
         }
-        
+
         // Leyenda 2000: Percepción
         if (isset($data['percepcion'])) {
             $leyendas[] = [
@@ -541,7 +541,7 @@ class DocumentService
                 'value' => 'COMPROBANTE DE PERCEPCIÓN'
             ];
         }
-        
+
         // Leyenda 2006: Detracción
         if (isset($data['detraccion'])) {
             $leyendas[] = [
@@ -549,7 +549,7 @@ class DocumentService
                 'value' => 'Operación sujeta a detracción'
             ];
         }
-        
+
         // Leyenda 2007: IVAP (Operaciones con arroz pilado)
         if (isset($data['detalles']) && $this->hasIvapItems($data['detalles'])) {
             $leyendas[] = [
@@ -557,10 +557,10 @@ class DocumentService
                 'value' => 'OPERACIÓN SUJETA AL IVAP'
             ];
         }
-        
+
         return $leyendas;
     }
-    
+
     protected function hasGratuitasItems(array $detalles): bool
     {
         foreach ($detalles as $detalle) {
@@ -571,7 +571,7 @@ class DocumentService
         }
         return false;
     }
-    
+
     protected function hasIvapItems(array $detalles): bool
     {
         foreach ($detalles as $detalle) {
@@ -588,10 +588,10 @@ class DocumentService
         $monedaName = $moneda === 'PEN' ? 'SOLES' : 'DÓLARES AMERICANOS';
         $entero = intval($numero);
         $decimales = intval(($numero - $entero) * 100);
-        
+
         // Esta es una implementación básica, se puede mejorar con una librería
         $letras = $this->numeroALetras($entero);
-        
+
         return strtoupper($letras . ' CON ' . sprintf('%02d', $decimales) . '/100 ' . $monedaName);
     }
 
@@ -599,11 +599,11 @@ class DocumentService
     {
         // Implementación básica - se puede reemplazar con una librería más completa
         if ($numero == 0) return 'CERO';
-        
+
         $unidades = ['', 'UNO', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE'];
         $decenas = ['', '', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA'];
         $especiales = ['DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISÉIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE'];
-        
+
         // Esta es una implementación muy básica
         // En producción se debe usar una librería completa
         return 'NÚMERO EN LETRAS'; // Placeholder
@@ -613,19 +613,19 @@ class DocumentService
     {
         $data = $document->toArray();
         $data['client'] = $document->client->toArray();
-        
+
         // Preparar datos globales
         $globalData = [
             'descuentos' => $data['descuentos'] ?? [],
             'anticipos' => $data['anticipos'] ?? [],
             'redondeo' => $data['redondeo'] ?? 0,
         ];
-        
+
         // Procesar detalles para completar campos de tributos
         $detalles = $data['detalles'];
         $totals = $this->calculateTotals($detalles, $globalData); // Esto completa los campos faltantes en los detalles
         $data['detalles'] = $detalles;
-        
+
         // Actualizar totales recalculados (crítico para operaciones gratuitas e IVAP)
         $data['mto_oper_gratuitas'] = $totals['mto_oper_gratuitas'];
         $data['mto_igv_gratuitas'] = $totals['mto_igv_gratuitas'];
@@ -633,7 +633,7 @@ class DocumentService
         $data['mto_base_ivap'] = $totals['mto_base_ivap'];
         $data['mto_ivap'] = $totals['mto_ivap'];
         $data['total_impuestos'] = $totals['total_impuestos'];
-        
+
         return $data;
     }
 
@@ -652,10 +652,10 @@ class DocumentService
             $branch = Branch::where('company_id', $company->id)
                            ->where('id', $data['branch_id'])
                            ->firstOrFail();
-            
+
             // Obtener siguiente correlativo para resúmenes
             $correlativo = $this->getNextSummaryCorrelative($company->id, $data['fecha_resumen']);
-            
+
             // Crear el resumen diario
             $summary = DailySummary::create([
                 'company_id' => $company->id,
@@ -680,20 +680,20 @@ class DocumentService
         try {
             $company = $summary->company;
             $greenterService = new GreenterService($company);
-            
+
             // Preparar datos para Greenter
             $summaryData = $this->prepareSummaryData($summary);
-            
+
             // Crear documento Greenter
             $greenterSummary = $greenterService->createSummary($summaryData);
-            
+
             // Enviar a SUNAT
             $result = $greenterService->sendSummaryDocument($greenterSummary);
-            
+
             if ($result['success']) {
                 // Guardar archivos
                 $xmlPath = $this->fileService->saveXml($summary, $result['xml']);
-                
+
                 // Actualizar el resumen
                 $summary->update([
                     'xml_path' => $xmlPath,
@@ -702,7 +702,7 @@ class DocumentService
                     'ticket' => $result['ticket'],
                     'codigo_hash' => $this->extractHashFromXml($result['xml']),
                 ]);
-                
+
                 return [
                     'success' => true,
                     'document' => $summary->fresh(),
@@ -714,20 +714,20 @@ class DocumentService
                     'estado_proceso' => 'ERROR',
                     'respuesta_sunat' => json_encode($result['error'])
                 ]);
-                
+
                 return [
                     'success' => false,
                     'document' => $summary->fresh(),
                     'error' => $result['error']
                 ];
             }
-            
+
         } catch (Exception $e) {
             $summary->update([
                 'estado_proceso' => 'ERROR',
                 'respuesta_sunat' => json_encode(['message' => $e->getMessage()])
             ]);
-            
+
             return [
                 'success' => false,
                 'document' => $summary->fresh(),
@@ -745,16 +745,16 @@ class DocumentService
                     'error' => 'No hay ticket disponible para consultar'
                 ];
             }
-            
+
             $company = $summary->company;
             $greenterService = new GreenterService($company);
-            
+
             $result = $greenterService->checkSummaryStatus($summary->ticket);
-            
+
             if ($result['success'] && $result['cdr_response']) {
                 // Guardar CDR
                 $cdrPath = $this->fileService->saveCdr($summary, $result['cdr_zip']);
-                
+
                 // Actualizar estado
                 $summary->update([
                     'cdr_path' => $cdrPath,
@@ -765,7 +765,7 @@ class DocumentService
                         'description' => $result['cdr_response']->getDescription()
                     ])
                 ]);
-                
+
                 return [
                     'success' => true,
                     'document' => $summary->fresh(),
@@ -773,19 +773,41 @@ class DocumentService
                 ];
             } else {
                 // Error en la consulta
+                // $summary->update([
+                //     'estado_proceso' => 'ERROR',
+                //     'estado_sunat' => 'RECHAZADO',
+                //     'respuesta_sunat' => json_encode($result['error'])
+                // ]);
+
+                // return [
+                //     'success' => false,
+                //     'document' => $summary->fresh(),
+                //     'error' => $result['error']
+                // ];
+
+                $errorObject = $result['error'] ?? null;
+                $errorMessage = 'Error desconocido de Greenter.';
+
+                if ($errorObject instanceof \Greenter\Model\Response\Error) {
+                    $errorMessage = 'Error SUNAT: ' . $errorObject->getCode() . ' - ' . $errorObject->getMessage();
+                }
+                else if (is_string($errorObject)) {
+                    $errorMessage = $errorObject;
+                }
+
                 $summary->update([
                     'estado_proceso' => 'ERROR',
                     'estado_sunat' => 'RECHAZADO',
-                    'respuesta_sunat' => json_encode($result['error'])
+                    'respuesta_sunat' => json_encode($errorObject)
                 ]);
-                
+
                 return [
                     'success' => false,
                     'document' => $summary->fresh(),
-                    'error' => $result['error']
+                    'error' => $errorMessage
                 ];
             }
-            
+
         } catch (Exception $e) {
             return [
                 'success' => false,
@@ -804,11 +826,11 @@ class DocumentService
                             ->where('estado_sunat', 'PENDIENTE')
                             ->whereNull('daily_summary_id') // Solo boletas no incluidas en resumen
                             ->get();
-            
+
             if ($boletas->isEmpty()) {
                 throw new Exception('No hay boletas pendientes para la fecha seleccionada');
             }
-            
+
             // Crear detalles del resumen basados en las boletas
             $detalles = [];
             foreach ($boletas as $boleta) {
@@ -828,21 +850,21 @@ class DocumentService
                     'mto_icbper' => $boleta->mto_icbper ?? 0,
                 ];
             }
-            
+
             // Datos para el resumen
             $summaryData = array_merge($data, [
                 'detalles' => $detalles,
                 'fecha_generacion' => now()->toDateString(),
             ]);
-            
+
             // Crear el resumen
             $summary = $this->createDailySummary($summaryData);
-            
+
             // Vincular boletas al resumen
             foreach ($boletas as $boleta) {
                 $boleta->update(['daily_summary_id' => $summary->id]);
             }
-            
+
             return $summary;
         });
     }
@@ -852,7 +874,7 @@ class DocumentService
         // Forzar fecha de generación como hoy para evitar problemas de zona horaria
         $fechaGeneracion = now()->format('Y-m-d');
         $fechaResumen = $summary->fecha_resumen->toDateString();
-        
+
         return [
             'fecha_generacion' => $fechaGeneracion,
             'fecha_resumen' => $fechaResumen,
@@ -868,11 +890,11 @@ class DocumentService
                                   ->whereDate('fecha_resumen', $fechaResumen)
                                   ->orderBy('correlativo', 'desc')
                                   ->first();
-        
+
         if (!$lastSummary) {
             return '001';
         }
-        
+
         $nextCorrelativo = intval($lastSummary->correlativo) + 1;
         return str_pad($nextCorrelativo, 3, '0', STR_PAD_LEFT);
     }
@@ -885,14 +907,14 @@ class DocumentService
             $branch = Branch::where('company_id', $company->id)
                            ->where('id', $data['branch_id'])
                            ->firstOrFail();
-            
+
             // Crear o buscar cliente
             $client = $this->getOrCreateClient($data['client']);
-            
+
             // Obtener siguiente correlativo
             $serie = $data['serie'];
             $correlativo = $branch->getNextCorrelative('07', $serie);
-            
+
             // Procesar detalles y calcular totales
             $detalles = $data['detalles'];
             $globalData = [
@@ -900,9 +922,9 @@ class DocumentService
                 'anticipos' => $data['anticipos'] ?? [],
                 'redondeo' => $data['redondeo'] ?? 0,
             ];
-            
+
             $this->calculateTotals($detalles, $globalData);
-            
+
             // Calcular totales
             $valorVenta = array_sum(array_column($detalles, 'mto_valor_venta'));
             $mtoOperGravadas = 0;
@@ -912,7 +934,7 @@ class DocumentService
             $mtoIgv = 0;
             $mtoIsc = 0;
             $mtoIcbper = 0;
-            
+
             foreach ($detalles as $detalle) {
                 switch ($detalle['tip_afe_igv']) {
                     case '10': // Gravado
@@ -935,20 +957,20 @@ class DocumentService
                         }
                         break;
                 }
-                
+
                 if (isset($detalle['isc'])) {
                     $mtoIsc += $detalle['isc'];
                 }
-                
+
                 if (isset($detalle['icbper'])) {
                     $mtoIcbper += $detalle['icbper'];
                 }
             }
-            
+
             $totalImpuestos = $mtoIgv + $mtoIsc + $mtoIcbper;
             $subTotal = $valorVenta + $totalImpuestos;
             $mtoImpVenta = $subTotal;
-            
+
             // Generar leyenda automática si no se proporciona
             $leyendas = $data['leyendas'] ?? [];
             if (empty($leyendas)) {
@@ -957,7 +979,7 @@ class DocumentService
                     'value' => $this->convertirNumeroALetras($mtoImpVenta, $data['moneda'] ?? 'PEN')
                 ];
             }
-            
+
             // Crear la nota de crédito
             $creditNote = CreditNote::create([
                 'company_id' => $company->id,
@@ -992,7 +1014,7 @@ class DocumentService
                 'estado_sunat' => 'PENDIENTE',
                 'usuario_creacion' => $data['usuario_creacion'] ?? null,
             ]);
-            
+
             return $creditNote;
         });
     }
@@ -1005,14 +1027,14 @@ class DocumentService
             $branch = Branch::where('company_id', $company->id)
                            ->where('id', $data['branch_id'])
                            ->firstOrFail();
-            
+
             // Crear o buscar cliente
             $client = $this->getOrCreateClient($data['client']);
-            
+
             // Obtener siguiente correlativo
             $serie = $data['serie'];
             $correlativo = $branch->getNextCorrelative('08', $serie);
-            
+
             // Procesar detalles y calcular totales
             $detalles = $data['detalles'];
             $globalData = [
@@ -1020,9 +1042,9 @@ class DocumentService
                 'anticipos' => $data['anticipos'] ?? [],
                 'redondeo' => $data['redondeo'] ?? 0,
             ];
-            
+
             $this->calculateTotals($detalles, $globalData);
-            
+
             // Calcular totales
             $valorVenta = array_sum(array_column($detalles, 'mto_valor_venta'));
             $mtoOperGravadas = 0;
@@ -1032,7 +1054,7 @@ class DocumentService
             $mtoIgv = 0;
             $mtoIsc = 0;
             $mtoIcbper = 0;
-            
+
             foreach ($detalles as $detalle) {
                 switch ($detalle['tip_afe_igv']) {
                     case '10': // Gravado
@@ -1054,20 +1076,20 @@ class DocumentService
                         }
                         break;
                 }
-                
+
                 if (isset($detalle['isc'])) {
                     $mtoIsc += $detalle['isc'];
                 }
-                
+
                 if (isset($detalle['icbper'])) {
                     $mtoIcbper += $detalle['icbper'];
                 }
             }
-            
+
             $totalImpuestos = $mtoIgv + $mtoIsc + $mtoIcbper;
             $subTotal = $valorVenta + $totalImpuestos;
             $mtoImpVenta = $subTotal;
-            
+
             // Generar leyenda automática si no se proporciona
             $leyendas = $data['leyendas'] ?? [];
             if (empty($leyendas)) {
@@ -1076,7 +1098,7 @@ class DocumentService
                     'value' => $this->convertirNumeroALetras($mtoImpVenta, $data['moneda'] ?? 'PEN')
                 ];
             }
-            
+
             // Crear la nota de débito
             $debitNote = DebitNote::create([
                 'company_id' => $company->id,
@@ -1108,7 +1130,7 @@ class DocumentService
                 'estado_sunat' => 'PENDIENTE',
                 'usuario_creacion' => $data['usuario_creacion'] ?? null,
             ]);
-            
+
             return $debitNote;
         });
     }
@@ -1121,18 +1143,18 @@ class DocumentService
             $branch = Branch::where('company_id', $company->id)
                            ->where('id', $data['branch_id'])
                            ->firstOrFail();
-            
+
             // Crear o buscar destinatario
             if (isset($data['destinatario_id'])) {
                 $destinatario = Client::findOrFail($data['destinatario_id']);
             } else {
                 $destinatario = $this->getOrCreateClient($data['destinatario']);
             }
-            
+
             // Obtener siguiente correlativo automático (ignorar correlativo enviado)
             $serie = $data['serie'];
             $correlativo = $branch->getNextCorrelative('09', $serie);
-            
+
             // Crear la guía de remisión
             $dispatchGuide = DispatchGuide::create([
                 'company_id' => $company->id,
@@ -1143,7 +1165,7 @@ class DocumentService
                 'correlativo' => $correlativo,
                 'fecha_emision' => $data['fecha_emision'],
                 'version' => $data['version'] ?? '2022',
-                
+
                 // Datos del envío
                 'cod_traslado' => $data['cod_traslado'],
                 'des_traslado' => $data['des_traslado'] ?? null,
@@ -1152,7 +1174,7 @@ class DocumentService
                 'peso_total' => $data['peso_total'],
                 'und_peso_total' => $data['und_peso_total'],
                 'num_bultos' => $data['num_bultos'] ?? null,
-                
+
                 // Direcciones - Soporte para ambos formatos: plano y nested
                 'partida' => isset($data['partida']) && is_array($data['partida']) ? [
                     'ubigeo' => $data['partida']['ubigeo'],
@@ -1176,7 +1198,7 @@ class DocumentService
                     'ruc' => $data['llegada_ruc'] ?? null,
                     'cod_local' => $data['llegada_cod_local'] ?? null,
                 ],
-                
+
                 // Datos de transporte (JSON según modalidad)
                 'transportista' => $data['mod_traslado'] === '01' ? [
                     'tipo_doc' => $data['transportista_tipo_doc'] ?? null,
@@ -1184,10 +1206,10 @@ class DocumentService
                     'razon_social' => $data['transportista_razon_social'] ?? null,
                     'nro_mtc' => $data['transportista_nro_mtc'] ?? null,
                 ] : null,
-                
+
                 // Indicadores especiales (M1L, etc.)
                 'indicadores' => $data['indicadores'] ?? null,
-                
+
                 'vehiculo' => isset($data['vehiculo_placa']) || isset($data['conductor_tipo_doc']) ? [
                     'placa' => $data['vehiculo_placa'] ?? null,
                     'placa_principal' => $data['vehiculo_placa'] ?? null,
@@ -1201,15 +1223,15 @@ class DocumentService
                         'apellidos' => $data['conductor_apellidos'] ?? null,
                     ] : null,
                 ] : null,
-                
+
                 // Detalles y observaciones
                 'detalles' => $data['detalles'],
                 'observaciones' => $data['observaciones'] ?? null,
-                
+
                 'estado_sunat' => 'PENDIENTE',
                 'usuario_creacion' => $data['usuario_creacion'] ?? null,
             ]);
-            
+
             return $dispatchGuide;
         });
     }
@@ -1219,25 +1241,25 @@ class DocumentService
         try {
             // IMPLEMENTACIÓN DIRECTA BASADA EN EJEMPLOS GREENTER
             // Evitamos completamente GreenterService para eliminar problemas de configuración
-            
+
             Log::info("=== INICIO sendDispatchGuideToSunat DIRECTO ===", [
                 'guide_id' => $guide->id,
                 'client_id' => $guide->client_id,
             ]);
-            
+
             // Cargar destinatario directamente
             $destinatario = \App\Models\Client::find($guide->client_id);
             if (!$destinatario) {
                 throw new Exception("Destinatario no encontrado: ID {$guide->client_id}");
             }
-            
+
             Log::info("Destinatario encontrado:", [
                 'id' => $destinatario->id,
                 'tipo_documento' => $destinatario->tipo_documento,
                 'numero_documento' => $destinatario->numero_documento,
                 'razon_social' => $destinatario->razon_social
             ]);
-            
+
             // CREAR DOCUMENTO GREENTER DIRECTAMENTE (como en ejemplos)
             $despatch = new \Greenter\Model\Despatch\Despatch();
             $despatch->setVersion('2022')
@@ -1245,20 +1267,20 @@ class DocumentService
                 ->setSerie($guide->serie)
                 ->setCorrelativo($guide->correlativo)
                 ->setFechaEmision($guide->fecha_emision);
-            
+
             // Empresa (usar datos reales de la guía)
             $company = new \Greenter\Model\Company\Company();
             $company->setRuc($guide->company->ruc)
                 ->setRazonSocial($guide->company->razon_social);
             $despatch->setCompany($company);
-            
+
             // Cliente/Destinatario
             $client = new \Greenter\Model\Client\Client();
             $client->setTipoDoc($destinatario->tipo_documento)
                 ->setNumDoc($destinatario->numero_documento)
                 ->setRznSocial($destinatario->razon_social);
             $despatch->setDestinatario($client);
-            
+
             // Datos del envío
             $envio = new \Greenter\Model\Despatch\Shipment();
             $envio->setCodTraslado($guide->cod_traslado)
@@ -1266,32 +1288,32 @@ class DocumentService
                 ->setFecTraslado($guide->fecha_traslado)
                 ->setPesoTotal($guide->peso_total)
                 ->setUndPesoTotal($guide->und_peso_total);
-            
+
             // Direcciones con soporte para traslados misma empresa (ejemplo: guia-misma-empresa.php)
             $llegada = new \Greenter\Model\Despatch\Direction(
-                $guide->llegada['ubigeo'] ?? '150101', 
+                $guide->llegada['ubigeo'] ?? '150101',
                 $guide->llegada['direccion'] ?? 'AV LIMA'
             );
-            
+
             // Para traslados entre establecimientos de la misma empresa
             if (isset($guide->llegada['ruc']) && isset($guide->llegada['cod_local'])) {
                 $llegada->setRuc($guide->llegada['ruc'])
                     ->setCodLocal($guide->llegada['cod_local']);
             }
-            
+
             $partida = new \Greenter\Model\Despatch\Direction(
-                $guide->partida['ubigeo'] ?? '150203', 
+                $guide->partida['ubigeo'] ?? '150203',
                 $guide->partida['direccion'] ?? 'AV ITALIA'
             );
-            
+
             // Para traslados entre establecimientos de la misma empresa
             if (isset($guide->partida['ruc']) && isset($guide->partida['cod_local'])) {
                 $partida->setRuc($guide->partida['ruc'])
                     ->setCodLocal($guide->partida['cod_local']);
             }
-            
+
             $envio->setLlegada($llegada)->setPartida($partida);
-            
+
             // Configurar transporte según modalidad
             if ($guide->mod_traslado === '01') {
                 // Transporte público - transportista (siguiendo ejemplo oficial Greenter)
@@ -1301,9 +1323,9 @@ class DocumentService
                         ->setNumDoc($guide->transportista['num_doc'])
                         ->setRznSocial($guide->transportista['razon_social'])
                         ->setNroMtc($guide->transportista['nro_mtc']);
-                    
+
                     $envio->setTransportista($transportista);
-                    
+
                     Log::info("Configurado transportista para modalidad 01", [
                         'tipo_doc' => $guide->transportista['tipo_doc'],
                         'num_doc' => $guide->transportista['num_doc'],
@@ -1316,34 +1338,34 @@ class DocumentService
                     ]);
                     throw new Exception("Para modalidad de transporte '01' (público) se requieren los datos del transportista");
                 }
-                
+
                 // ❌ ELIMINAR - Para transporte público (01) NO se configura vehículo según ejemplos Greenter
                 // Los ejemplos oficiales de Greenter NO configuran vehículo para modalidad '01'
                 Log::info("Modalidad 01 (Transporte Público) - No se configura vehículo según ejemplos oficiales");
-                
+
             } elseif ($guide->mod_traslado === '02') {
                 // Transporte privado - verificar si es M1L o con conductor/vehículo
-                
+
                 Log::info("=== DEBUG MODALIDAD 02 ===", [
                     'indicadores' => $guide->indicadores ?? 'null',
                     'indicadores_type' => gettype($guide->indicadores ?? null),
                     'indicadores_is_array' => is_array($guide->indicadores ?? null),
                     'vehiculo' => $guide->vehiculo ?? 'null'
                 ]);
-                
+
                 // Verificar si tiene indicador M1L (vehículos menores)
                 if (isset($guide->indicadores) && is_array($guide->indicadores) && in_array('SUNAT_Envio_IndicadorTrasladoVehiculoM1L', $guide->indicadores)) {
                     // Modalidad M1L - Sin conductor ni vehículo (ejemplo: guia-transporteM1L.php)
                     $envio->setIndicadores(['SUNAT_Envio_IndicadorTrasladoVehiculoM1L']);
-                    
+
                     Log::info("Configurado transporte privado M1L - Sin conductor ni vehículo", [
                         'indicadores_configurados' => ['SUNAT_Envio_IndicadorTrasladoVehiculoM1L']
                     ]);
-                    
+
                 } else {
                     // Transporte privado normal - con conductor y vehículo (ejemplo: guia-transportePrivado.php)
                     Log::info("Entrando a configuración transporte privado NORMAL (sin M1L)");
-                    
+
                     // Configurar conductor
                     if (isset($guide->vehiculo['conductor'])) {
                         $conductor = $guide->vehiculo['conductor'];
@@ -1354,30 +1376,30 @@ class DocumentService
                             ->setLicencia($conductor['licencia'] ?? 'L12345')
                             ->setNombres($conductor['nombres'] ?? 'CONDUCTOR')
                             ->setApellidos($conductor['apellidos'] ?? 'APELLIDO');
-                        
+
                         $envio->setChoferes([$chofer]);
-                        
+
                         Log::info("Configurado conductor", [
                             'tipo_doc' => $conductor['tipo_doc'] ?? '1',
                             'num_doc' => $conductor['num_doc'] ?? '12345678'
                         ]);
                     }
-                    
+
                     // Configurar vehículo principal
                     if (isset($guide->vehiculo['placa_principal']) || isset($guide->vehiculo['placa'])) {
                         $placaPrincipal = $guide->vehiculo['placa_principal'] ?? $guide->vehiculo['placa'];
                         $vehiculo = new \Greenter\Model\Despatch\Vehicle();
                         $vehiculo->setPlaca($placaPrincipal);
-                        
+
                         // Vehículo secundario (opcional)
                         if (isset($guide->vehiculo['placa_secundaria'])) {
                             $vehiculoSecundario = new \Greenter\Model\Despatch\Vehicle();
                             $vehiculoSecundario->setPlaca($guide->vehiculo['placa_secundaria']);
                             $vehiculo->setSecundarios([$vehiculoSecundario]);
                         }
-                        
+
                         $envio->setVehiculo($vehiculo);
-                        
+
                         Log::info("Configurado vehículo", [
                             'placa_principal' => $placaPrincipal,
                             'placa_secundaria' => $guide->vehiculo['placa_secundaria'] ?? null
@@ -1385,9 +1407,9 @@ class DocumentService
                     }
                 }
             }
-            
+
             $despatch->setEnvio($envio);
-            
+
             // Detalles con soporte completo (ejemplo: guia-extra-atributos.php)
             $details = [];
             foreach ($guide->detalles as $detalle) {
@@ -1396,12 +1418,12 @@ class DocumentService
                     ->setUnidad($detalle['unidad'])
                     ->setDescripcion($detalle['descripcion'])
                     ->setCodigo($detalle['codigo']);
-                
+
                 // Código SUNAT del producto (opcional)
                 if (isset($detalle['cod_prod_sunat'])) {
                     $detail->setCodProdSunat($detalle['cod_prod_sunat']);
                 }
-                
+
                 // Atributos adicionales (ejemplo: partida arancelaria)
                 if (isset($detalle['atributos']) && is_array($detalle['atributos'])) {
                     $attributes = [];
@@ -1414,11 +1436,11 @@ class DocumentService
                     }
                     $detail->setAtributos($attributes);
                 }
-                
+
                 $details[] = $detail;
             }
             $despatch->setDetails($details);
-            
+
             // Documentos relacionados (ejemplo: guia-extra-atributos.php)
             if (isset($guide->documentos_relacionados) && is_array($guide->documentos_relacionados)) {
                 $relDocs = [];
@@ -1431,32 +1453,32 @@ class DocumentService
                 }
                 $despatch->setAddDocs($relDocs);
             }
-            
+
             // USAR LA CONFIGURACIÓN DE LA CLASE UTIL DE GREENTER
             $api = new \Greenter\Api([
                 'auth' => 'https://gre-test.nubefact.com/v1',
                 'cpe' => 'https://gre-test.nubefact.com/v1',
             ]);
-            
+
             // Configurar certificado
             $certificadoContent = file_get_contents(storage_path('app/public/certificado/certificado.pem'));
             if ($certificadoContent === false) {
                 throw new Exception("No se pudo cargar el certificado");
             }
-            
+
             // Obtener credenciales GRE de la configuración de la empresa
             $company = $guide->company;
-            
+
             if (!$company->hasGreCredentials()) {
                 throw new Exception("Las credenciales GRE no están configuradas para la empresa: {$company->razon_social}");
             }
-            
+
             $clientId = $company->getGreClientId();
             $clientSecret = $company->getGreClientSecret();
             $rucProveedor = $company->getGreRucProveedor();
             $usuarioSol = $company->getGreUsuarioSol();
             $claveSol = $company->getGreClaveSol();
-            
+
             Log::info("Configurando credenciales GRE desde base de datos", [
                 'company_id' => $company->id,
                 'modo_produccion' => $company->modo_produccion,
@@ -1464,7 +1486,7 @@ class DocumentService
                 'ruc_proveedor' => $rucProveedor,
                 'usuario_sol' => $usuarioSol,
             ]);
-            
+
             $api->setBuilderOptions([
                 'strict_variables' => true,
                 'optimizations' => 0,
@@ -1474,21 +1496,21 @@ class DocumentService
             ->setApiCredentials($clientId, $clientSecret)
             ->setClaveSOL($rucProveedor, $usuarioSol, $claveSol)
             ->setCertificate($certificadoContent);
-            
+
             Log::info("Enviando a SUNAT con credenciales configuradas...");
             $result = $api->send($despatch);
-            
+
             // Procesar resultado como en ejemplos Greenter
             if ($result->isSuccess()) {
                 // Obtener XML generado
                 $xml = $api->getLastXml();
                 $ticket = $result->getTicket();
-                
+
                 Log::info("Envío exitoso", ['ticket' => $ticket]);
-                
+
                 // Guardar archivos
                 $xmlPath = $this->fileService->saveXml($guide, $xml);
-                
+
                 // Actualizar la guía
                 $guide->update([
                     'xml_path' => $xmlPath,
@@ -1496,7 +1518,7 @@ class DocumentService
                     'ticket' => $ticket,
                     'respuesta_sunat' => json_encode(['success' => true, 'ticket' => $ticket])
                 ]);
-                
+
                 return [
                     'success' => true,
                     'document' => $guide->fresh(),
@@ -1507,12 +1529,12 @@ class DocumentService
                 $error = $result->getError();
                 $errorMessage = $error ? $error->getMessage() : 'Error desconocido';
                 $errorCode = $error ? $error->getCode() : 'UNKNOWN';
-                
+
                 Log::error("Error en envío SUNAT", [
                     'code' => $errorCode,
                     'message' => $errorMessage
                 ]);
-                
+
                 // Actualizar estado de error
                 $guide->update([
                     'respuesta_sunat' => json_encode([
@@ -1521,21 +1543,21 @@ class DocumentService
                         'message' => $errorMessage
                     ])
                 ]);
-                
+
                 return [
                     'success' => false,
                     'document' => $guide->fresh(),
                     'error' => $errorMessage
                 ];
             }
-            
+
         } catch (Exception $e) {
             Log::error("Excepción en sendDispatchGuideToSunat", [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
             ]);
-            
+
             $guide->update([
                 'respuesta_sunat' => json_encode([
                     'success' => false,
@@ -1543,7 +1565,7 @@ class DocumentService
                     'message' => $e->getMessage()
                 ])
             ]);
-            
+
             return [
                 'success' => false,
                 'document' => $guide->fresh(),
@@ -1561,24 +1583,24 @@ class DocumentService
                     'error' => 'No hay ticket disponible para consultar'
                 ];
             }
-            
+
             Log::info("=== CONSULTANDO ESTADO GUÍA DIRECTA ===", [
                 'guide_id' => $guide->id,
                 'ticket' => $guide->ticket
             ]);
-            
+
             // USAR CONFIGURACIÓN DIRECTA COMO EN ENVÍO
             $api = new \Greenter\Api([
                 'auth' => 'https://gre-test.nubefact.com/v1',
                 'cpe' => 'https://gre-test.nubefact.com/v1',
             ]);
-            
+
             // Configurar certificado
             $certificadoContent = file_get_contents(storage_path('app/public/certificado/certificado.pem'));
             if ($certificadoContent === false) {
                 throw new Exception("No se pudo cargar el certificado");
             }
-            
+
             $api->setBuilderOptions([
                 'strict_variables' => true,
                 'optimizations' => 0,
@@ -1588,24 +1610,24 @@ class DocumentService
             ->setApiCredentials('test-85e5b0ae-255c-4891-a595-0b98c65c9854', 'test-Hty/M6QshYvPgItX2P0+Kw==')
             ->setClaveSOL('20161515648', 'MODDATOS', 'MODDATOS')
             ->setCertificate($certificadoContent);
-            
+
             Log::info("Consultando estado en SUNAT...");
             $result = $api->getStatus($guide->ticket);
-            
+
             if ($result->isSuccess()) {
                 $cdr = $result->getCdrResponse();
                 Log::info("Estado obtenido exitosamente", [
                     'code' => $cdr->getCode(),
                     'description' => $cdr->getDescription()
                 ]);
-                
+
                 // Guardar CDR
                 $cdrZip = $result->getCdrZip();
                 $cdrPath = null;
                 if ($cdrZip) {
                     $cdrPath = $this->fileService->saveCdr($guide, $cdrZip);
                 }
-                
+
                 // Actualizar estado
                 $guide->update([
                     'cdr_path' => $cdrPath,
@@ -1615,7 +1637,7 @@ class DocumentService
                         'description' => $cdr->getDescription()
                     ])
                 ]);
-                
+
                 return [
                     'success' => true,
                     'document' => $guide->fresh(),
@@ -1626,12 +1648,12 @@ class DocumentService
                 $error = $result->getError();
                 $errorMessage = $error ? $error->getMessage() : 'Error desconocido';
                 $errorCode = $error ? $error->getCode() : 'UNKNOWN';
-                
+
                 Log::error("Error al consultar estado", [
                     'code' => $errorCode,
                     'message' => $errorMessage
                 ]);
-                
+
                 $guide->update([
                     'estado_sunat' => 'RECHAZADO',
                     'respuesta_sunat' => json_encode([
@@ -1639,21 +1661,21 @@ class DocumentService
                         'message' => $errorMessage
                     ])
                 ]);
-                
+
                 return [
                     'success' => false,
                     'document' => $guide->fresh(),
                     'error' => $errorMessage
                 ];
             }
-            
+
         } catch (Exception $e) {
             Log::error("Excepción en checkDispatchGuideStatus", [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
             ]);
-            
+
             return [
                 'success' => false,
                 'error' => $e->getMessage()
@@ -1668,7 +1690,7 @@ class DocumentService
         if ($guide->client_id) {
             $destinatario = \App\Models\Client::find($guide->client_id);
         }
-        
+
         // Validar que existe el destinatario
         if (!$destinatario) {
             throw new Exception("No se pudo encontrar el destinatario (client_id: {$guide->client_id}) para la guía de remisión ID: {$guide->id}");
@@ -1687,7 +1709,7 @@ class DocumentService
             'correlativo' => $guide->correlativo,
             'fecha_emision' => $guide->fecha_emision->format('Y-m-d'),
             'version' => $guide->version,
-            
+
             // Destinatario - usando consulta directa
             'destinatario' => [
                 'tipo_documento' => $destinatario->tipo_documento,
@@ -1701,7 +1723,7 @@ class DocumentService
                 'telefono' => $destinatario->telefono ?? '',
                 'email' => $destinatario->email ?? '',
             ],
-            
+
             // Datos del envío
             'cod_traslado' => $guide->cod_traslado,
             'mod_traslado' => $guide->mod_traslado,
@@ -1709,27 +1731,27 @@ class DocumentService
             'peso_total' => $guide->peso_total,
             'und_peso_total' => $guide->und_peso_total,
             'num_bultos' => $guide->num_bultos,
-            
+
             // Direcciones
             'partida_ubigeo' => $guide->partida['ubigeo'] ?? '',
             'partida_direccion' => $guide->partida['direccion'] ?? '',
             'llegada_ubigeo' => $guide->llegada['ubigeo'] ?? '',
             'llegada_direccion' => $guide->llegada['direccion'] ?? '',
-            
+
             // Detalles
             'detalles' => $guide->detalles,
             'observaciones' => $guide->observaciones,
         ];
-        
+
         // Agregar datos de transporte según modalidad
         if ($guide->mod_traslado === '01') {
             // Transporte público
             $data['transportista'] = $guide->transportista;
         } elseif ($guide->mod_traslado === '02') {
             // Transporte privado - verificar si es M1L
-            $esM1L = isset($guide->indicadores) && is_array($guide->indicadores) && 
+            $esM1L = isset($guide->indicadores) && is_array($guide->indicadores) &&
                      in_array('SUNAT_Envio_IndicadorTrasladoVehiculoM1L', $guide->indicadores);
-                     
+
             if ($esM1L) {
                 // M1L - Sin datos de vehículo ni conductor (ejemplo: guia-misma-empresa.php)
                 $data['indicadores'] = $guide->indicadores;
@@ -1747,7 +1769,7 @@ class DocumentService
                 ]);
             }
         }
-        
+
         return $data;
     }
 
@@ -1756,9 +1778,9 @@ class DocumentService
     {
         try {
             logger()->info("Generando PDF para documento: {$document->id}, tipo: {$documentType}, formato: {$format}");
-            
+
             $document = $document->load(['company', 'branch', 'destinatario']);
-            
+
             $pdfContent = match($documentType) {
                 'invoice' => $this->pdfService->generateInvoicePdf($document, $format),
                 'boleta' => $this->pdfService->generateBoletaPdf($document, $format),
@@ -1773,7 +1795,7 @@ class DocumentService
             // Guardar el PDF
             $pdfPath = $this->fileService->savePdf($document, $pdfContent);
             logger()->info("PDF guardado en: {$pdfPath}");
-            
+
             // Actualizar la ruta del PDF en el documento
             $document->update(['pdf_path' => $pdfPath]);
             logger()->info("Ruta PDF actualizada en BD: {$pdfPath}");
@@ -1790,7 +1812,7 @@ class DocumentService
         $this->generateDocumentPdf($invoice, 'invoice');
     }
 
-    public function generateBoletaPdf(Boleta $boleta): void  
+    public function generateBoletaPdf(Boleta $boleta): void
     {
         $this->generateDocumentPdf($boleta, 'boleta');
     }
@@ -1818,14 +1840,14 @@ class DocumentService
             $branch = Branch::where('company_id', $company->id)
                            ->where('id', $data['branch_id'])
                            ->firstOrFail();
-            
+
             // Crear o buscar el proveedor
             $proveedor = $this->getOrCreateClient($data['proveedor']);
-            
+
             // Obtener siguiente correlativo (tipo '20' para retenciones)
             $serie = $data['serie'];
             $correlativo = $branch->getNextCorrelative('20', $serie);
-            
+
             // Crear la retención
             $retention = Retention::create([
                 'company_id' => $data['company_id'],
@@ -1852,7 +1874,7 @@ class DocumentService
     {
         try {
             $greenterService = new GreenterService($retention->company);
-            
+
             // Preparar datos para Greenter
             $retentionData = [
                 'company_id' => $retention->company_id,
@@ -1882,15 +1904,15 @@ class DocumentService
 
             // Crear documento Greenter
             $greenterRetention = $greenterService->createRetention($retentionData);
-            
+
             // Enviar a SUNAT
             $result = $greenterService->sendRetention($greenterRetention);
-            
+
             // Guardar archivos
             if ($result['xml']) {
                 $retention->xml_path = $this->fileService->saveXml($retention, $result['xml'], 'retention');
             }
-            
+
             if ($result['success'] && $result['cdr_zip']) {
                 $retention->cdr_path = $this->fileService->saveCdr($retention, $result['cdr_zip'], 'retention');
                 $retention->hash_cdr = $result['cdr_response']->getId() ?? '';
@@ -1898,9 +1920,9 @@ class DocumentService
             } else {
                 $retention->estado_sunat = 'RECHAZADO';
             }
-            
+
             $retention->save();
-            
+
             return [
                 'success' => $result['success'],
                 'document' => $retention->fresh(['company', 'branch', 'proveedor']),
@@ -1931,10 +1953,10 @@ class DocumentService
             $branch = Branch::where('company_id', $company->id)
                            ->where('id', $data['branch_id'])
                            ->firstOrFail();
-            
+
             // Obtener siguiente correlativo para la fecha
             $correlativo = $this->getNextVoidedDocumentCorrelative($company->id, $data['fecha_referencia']);
-            
+
             // Crear comunicación de baja
             $voidedDocument = VoidedDocument::create([
                 'company_id' => $company->id,
@@ -1960,20 +1982,20 @@ class DocumentService
         try {
             $company = $voidedDocument->company;
             $greenterService = new GreenterService($company);
-            
+
             // Preparar datos para Greenter
             $voidedData = $this->prepareVoidedDocumentData($voidedDocument);
-            
+
             // Crear documento Greenter
             $greenterVoided = $greenterService->createVoidedDocument($voidedData);
-            
+
             // Enviar a SUNAT
             $result = $greenterService->sendVoidedDocument($greenterVoided);
-            
+
             if ($result['success']) {
                 // Guardar archivos
                 $xmlPath = $this->fileService->saveXml($voidedDocument, $result['xml']);
-                
+
                 // Actualizar la comunicación de baja
                 $voidedDocument->update([
                     'xml_path' => $xmlPath,
@@ -1981,7 +2003,7 @@ class DocumentService
                     'ticket' => $result['ticket'],
                     'codigo_hash' => $this->extractHashFromXml($result['xml']),
                 ]);
-                
+
                 return [
                     'success' => true,
                     'document' => $voidedDocument->fresh(),
@@ -1996,7 +2018,7 @@ class DocumentService
                         'message' => $result['error']->message ?? 'Error desconocido'
                     ])
                 ]);
-                
+
                 return [
                     'success' => false,
                     'document' => $voidedDocument->fresh(),
@@ -2008,7 +2030,7 @@ class DocumentService
                 'estado_sunat' => 'ERROR',
                 'respuesta_sunat' => json_encode(['message' => $e->getMessage()])
             ]);
-            
+
             return [
                 'success' => false,
                 'document' => $voidedDocument->fresh(),
@@ -2022,19 +2044,19 @@ class DocumentService
         try {
             $company = $voidedDocument->company;
             $greenterService = new GreenterService($company);
-            
+
             // Consultar estado con ticket
             $result = $greenterService->checkVoidedDocumentStatus($voidedDocument->ticket);
-            
+
             if ($result['success']) {
                 // Procesar respuesta CDR
                 $cdrResponse = $result['cdr_response'];
                 $estado = 'PROCESANDO';
-                
+
                 if ($cdrResponse && method_exists($cdrResponse, 'getDescription') && $cdrResponse->getDescription() !== null) {
                     if (strpos($cdrResponse->getDescription(), 'aceptad') !== false) {
                         $estado = 'ACEPTADO';
-                        
+
                         // Guardar CDR
                         if ($result['cdr_zip']) {
                             $cdrPath = $this->fileService->saveCdr($voidedDocument, $result['cdr_zip']);
@@ -2044,7 +2066,7 @@ class DocumentService
                         $estado = 'RECHAZADO';
                     }
                 }
-                
+
                 $voidedDocument->update([
                     'estado_sunat' => $estado,
                     'respuesta_sunat' => $cdrResponse ? json_encode([
@@ -2053,7 +2075,7 @@ class DocumentService
                     ]) : null,
                     'cdr_path' => $voidedDocument->cdr_path
                 ]);
-                
+
                 return [
                     'success' => true,
                     'document' => $voidedDocument->fresh()
@@ -2077,7 +2099,7 @@ class DocumentService
     public function getDocumentsForVoiding(int $companyId, int $branchId, string $fechaReferencia, ?string $tipoDocumento = null): array
     {
         $documents = [];
-        
+
         // Buscar facturas ACEPTADAS de la fecha
         if (!$tipoDocumento || $tipoDocumento === '01') {
             $facturas = Invoice::where('company_id', $companyId)
@@ -2085,7 +2107,7 @@ class DocumentService
                               ->whereDate('fecha_emision', $fechaReferencia)
                               ->where('estado_sunat', 'ACEPTADO')
                               ->get(['id', 'serie', 'correlativo', 'numero_completo', 'mto_imp_venta']);
-            
+
             foreach ($facturas as $factura) {
                 $documents[] = [
                     'id' => $factura->id,
@@ -2098,7 +2120,7 @@ class DocumentService
                 ];
             }
         }
-        
+
         // Buscar boletas ACEPTADAS de la fecha
         if (!$tipoDocumento || $tipoDocumento === '03') {
             $boletas = Boleta::where('company_id', $companyId)
@@ -2106,7 +2128,7 @@ class DocumentService
                             ->whereDate('fecha_emision', $fechaReferencia)
                             ->where('estado_sunat', 'ACEPTADO')
                             ->get(['id', 'serie', 'correlativo', 'numero_completo', 'mto_imp_venta']);
-            
+
             foreach ($boletas as $boleta) {
                 $documents[] = [
                     'id' => $boleta->id,
@@ -2119,7 +2141,7 @@ class DocumentService
                 ];
             }
         }
-        
+
         // Buscar notas de crédito ACEPTADAS de la fecha
         if (!$tipoDocumento || $tipoDocumento === '07') {
             $creditNotes = CreditNote::where('company_id', $companyId)
@@ -2127,7 +2149,7 @@ class DocumentService
                                    ->whereDate('fecha_emision', $fechaReferencia)
                                    ->where('estado_sunat', 'ACEPTADO')
                                    ->get(['id', 'serie', 'correlativo', 'numero_completo', 'mto_imp_venta']);
-            
+
             foreach ($creditNotes as $creditNote) {
                 $documents[] = [
                     'id' => $creditNote->id,
@@ -2140,9 +2162,9 @@ class DocumentService
                 ];
             }
         }
-        
+
         // Se pueden agregar más tipos de documentos según requerimientos SUNAT
-        
+
         return $documents;
     }
 
@@ -2164,11 +2186,11 @@ class DocumentService
                                   ->whereDate('fecha_referencia', $fechaReferencia)
                                   ->orderBy('correlativo', 'desc')
                                   ->first();
-        
+
         if (!$lastVoided) {
             return '001';
         }
-        
+
         $nextCorrelativo = intval($lastVoided->correlativo) + 1;
         return str_pad($nextCorrelativo, 3, '0', STR_PAD_LEFT);
     }
@@ -2179,11 +2201,11 @@ class DocumentService
             '', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve',
             'diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve', 'veinte'
         ];
-        
+
         $decenas = [
             '', '', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa'
         ];
-        
+
         $centenas = [
             '', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos',
             'seiscientos', 'setecientos', 'ochocientos', 'novecientos'
@@ -2220,7 +2242,7 @@ class DocumentService
         if ($numero < 100) {
             $dec = intval($numero / 10);
             $uni = $numero % 10;
-            
+
             if ($uni > 0) {
                 return $decenas[$dec] . ' y ' . $unidades[$uni];
             } else {
@@ -2231,30 +2253,30 @@ class DocumentService
         if ($numero < 1000) {
             $cen = intval($numero / 100);
             $resto = $numero % 100;
-            
+
             $resultado = ($numero == 100) ? 'cien' : $centenas[$cen];
-            
+
             if ($resto > 0) {
                 $resultado .= ' ' . $this->convertirEntero($resto, $unidades, $decenas, $centenas);
             }
-            
+
             return $resultado;
         }
 
         if ($numero < 1000000) {
             $miles = intval($numero / 1000);
             $resto = $numero % 1000;
-            
+
             if ($miles == 1) {
                 $resultado = 'mil';
             } else {
                 $resultado = $this->convertirEntero($miles, $unidades, $decenas, $centenas) . ' mil';
             }
-            
+
             if ($resto > 0) {
                 $resultado .= ' ' . $this->convertirEntero($resto, $unidades, $decenas, $centenas);
             }
-            
+
             return $resultado;
         }
 
