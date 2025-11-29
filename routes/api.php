@@ -54,7 +54,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::post('/auth/create-user', [AuthController::class, 'createUser']);
-    
+
     // Usuario autenticado
     Route::get('/user', function (Request $request) {
         return $request->user();
@@ -82,7 +82,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     // ========================
     // EMPRESAS Y CONFIGURACIONES
     // ========================
-    
+
     // Empresas
     Route::apiResource('companies', CompanyController::class);
     Route::post('/companies/{company}/activate', [CompanyController::class, 'activate']);
@@ -108,7 +108,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     // ========================
     // CREDENCIALES GRE
     // ========================
-    
+
     // Credenciales GRE por empresa
     Route::prefix('companies/{company}/gre-credentials')->group(function () {
         Route::get('/', [GreCredentialsController::class, 'show']);
@@ -148,7 +148,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::delete('/branches/{branch}/correlatives/{correlative}', [CorrelativeController::class, 'destroy']);
     Route::post('/branches/{branch}/correlatives/batch', [CorrelativeController::class, 'createBatch']);
     Route::post('/branches/{branch}/correlatives/{correlative}/increment', [CorrelativeController::class, 'increment']);
-    
+
     // Catálogos de correlativos
     Route::get('/correlatives/document-types', [CorrelativeController::class, 'getDocumentTypes']);
 
@@ -288,11 +288,42 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::post('/boleta/{id}', [ConsultaCpeController::class, 'consultarBoleta']);
         Route::post('/nota-credito/{id}', [ConsultaCpeController::class, 'consultarNotaCredito']);
         Route::post('/nota-debito/{id}', [ConsultaCpeController::class, 'consultarNotaDebito']);
-        
+
         // Consulta masiva
         Route::post('/masivo', [ConsultaCpeController::class, 'consultarDocumentosMasivo']);
-        
+
         // Estadísticas de consultas
         Route::get('/estadisticas', [ConsultaCpeController::class, 'estadisticasConsultas']);
+    });
+
+    // ========================
+    // CONSULTA CPE MEJORADA (CON FALLBACK SOAP)
+    // ========================
+    Route::prefix('consulta-cpe-v2')->group(function () {
+        // Consultas individuales mejoradas
+        Route::post('/factura/{id}', [ConsultaCpeControllerMejorado::class, 'consultarFacturaMejorada'])
+            ->name('cpe-v2.factura');
+        Route::post('/factura/{id}/con-cdr', [ConsultaCpeControllerMejorado::class, 'consultarFacturaConCdr'])
+            ->name('cpe-v2.factura-con-cdr');
+        Route::post('/boleta/{id}', [ConsultaCpeControllerMejorado::class, 'consultarBoletaMejorada'])
+            ->name('cpe-v2.boleta');
+
+        // Consulta por datos directos (sin documento en BD)
+        Route::post('/por-datos', [ConsultaCpeControllerMejorado::class, 'consultarPorDatos'])
+            ->name('cpe-v2.por-datos');
+
+        // Consulta masiva mejorada
+        Route::post('/masivo', [ConsultaCpeControllerMejorado::class, 'consultarMasiva'])
+            ->name('cpe-v2.masivo');
+
+        // Validación de documentos
+        Route::get('/validar/{tipo}/{id}', [ConsultaCpeControllerMejorado::class, 'validarDocumento'])
+            ->name('cpe-v2.validar');
+
+        // Gestión de CDRs
+        Route::get('/cdr/{companyId}', [ConsultaCpeControllerMejorado::class, 'listarCdrs'])
+            ->name('cpe-v2.listar-cdrs');
+        Route::get('/cdr/{companyId}/{filename}', [ConsultaCpeControllerMejorado::class, 'descargarCdr'])
+            ->name('cpe-v2.descargar-cdr');
     });
 });

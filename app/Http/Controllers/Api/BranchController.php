@@ -37,7 +37,6 @@ class BranchController extends Controller
                     'companies_count' => $branches->unique('company_id')->count()
                 ]
             ]);
-
         } catch (Exception $e) {
             Log::error("Error al listar sucursales", [
                 'error' => $e->getMessage()
@@ -57,11 +56,11 @@ class BranchController extends Controller
     {
         try {
             $validated = $request->validated();
-            
+
             // Verificar que la empresa existe y está activa
             $company = Company::where('id', $validated['company_id'])
-                             ->where('activo', true)
-                             ->first();
+                ->where('activo', true)
+                ->first();
 
             if (!$company) {
                 return response()->json([
@@ -83,7 +82,6 @@ class BranchController extends Controller
                 'message' => 'Sucursal creada exitosamente',
                 'data' => $branch->load('company:id,ruc,razon_social')
             ], 201);
-
         } catch (Exception $e) {
             Log::error("Error al crear sucursal", [
                 'request_data' => $validated ?? [],
@@ -109,7 +107,6 @@ class BranchController extends Controller
                 'success' => true,
                 'data' => $branch
             ]);
-
         } catch (Exception $e) {
             Log::error("Error al obtener sucursal", [
                 'branch_id' => $branch->id,
@@ -130,12 +127,12 @@ class BranchController extends Controller
     {
         try {
             $validated = $request->validated();
-            
+
             // Verificar que la empresa nueva existe y está activa (si se está cambiando)
             if (isset($validated['company_id'])) {
                 $company = Company::where('id', $validated['company_id'])
-                                 ->where('activo', true)
-                                 ->first();
+                    ->where('activo', true)
+                    ->first();
 
                 if (!$company) {
                     return response()->json([
@@ -158,7 +155,6 @@ class BranchController extends Controller
                 'message' => 'Sucursal actualizada exitosamente',
                 'data' => $branch->fresh()->load('company:id,ruc,razon_social')
             ]);
-
         } catch (Exception $e) {
             Log::error("Error al actualizar sucursal", [
                 'branch_id' => $branch->id,
@@ -203,7 +199,6 @@ class BranchController extends Controller
                 'success' => true,
                 'message' => 'Sucursal desactivada exitosamente'
             ]);
-
         } catch (Exception $e) {
             Log::error("Error al desactivar sucursal", [
                 'branch_id' => $branch->id,
@@ -235,7 +230,6 @@ class BranchController extends Controller
                 'message' => 'Sucursal activada exitosamente',
                 'data' => $branch->load('company:id,ruc,razon_social')
             ]);
-
         } catch (Exception $e) {
             Log::error("Error al activar sucursal", [
                 'branch_id' => $branch->id,
@@ -256,13 +250,21 @@ class BranchController extends Controller
     {
         try {
             $branches = $company->branches()
-                              ->select([
-                                  'id', 'company_id', 'nombre', 'direccion',
-                                  'distrito', 'provincia', 'departamento',
-                                  'telefono', 'email', 'activo',
-                                  'created_at', 'updated_at'
-                              ])
-                              ->get();
+                ->select([
+                    'id',
+                    'company_id',
+                    'nombre',
+                    'direccion',
+                    'distrito',
+                    'provincia',
+                    'departamento',
+                    'telefono',
+                    'email',
+                    'activo',
+                    'created_at',
+                    'updated_at'
+                ])
+                ->get();
 
             return response()->json([
                 'success' => true,
@@ -274,7 +276,6 @@ class BranchController extends Controller
                     'active_branches' => $branches->where('activo', true)->count()
                 ]
             ]);
-
         } catch (Exception $e) {
             Log::error("Error al obtener sucursales por empresa", [
                 'company_id' => $company->id,

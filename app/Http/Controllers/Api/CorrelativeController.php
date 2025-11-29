@@ -295,6 +295,8 @@ class CorrelativeController extends Controller
     public function createBatch(Request $request, Branch $branch): JsonResponse
     {
         try {
+            $companyId = $branch->company_id;
+
             $validator = Validator::make($request->all(), [
                 'correlativos' => 'required|array|min:1',
                 'correlativos.*.tipo_documento' => 'required|string|max:2|in:' . implode(',', array_keys(self::TIPOS_DOCUMENTO)),
@@ -303,13 +305,15 @@ class CorrelativeController extends Controller
                     'string',
                     'max:4',
                     'regex:/^[A-Z0-9]+$/',
-                    function ($attribute, $value, $fail) use ($branch, $request) {
+                    function ($attribute, $value, $fail) use ($branch, $request, $companyId) {
                         $index = explode('.', $attribute)[1];
                         $tipoDocumento = $request->input("correlativos.{$index}.tipo_documento");
                         $exists = Correlative::query()
-                            ->where('tipo_documento', $tipoDocumento)
-                            ->where('serie', strtoupper($value))
-                            ->where('branch_id', '!=', $branch->id)
+                            ->join('branches', 'correlatives.branch_id', '=', 'branches.id')
+                            ->where('branches.company_id', $companyId)
+                            ->where('correlatives.tipo_documento', $tipoDocumento)
+                            ->where('correlatives.serie', strtoupper($value))
+                            ->where('correlatives.branch_id', '!=', $branch->id)
                             ->exists();
 
                         if ($exists) {
@@ -333,25 +337,13 @@ class CorrelativeController extends Controller
 
             foreach ($request->correlativos as $index => $data) {
                 try {
-                    // Verificar que no exista la combinación
-                    // $exists = Correlative::where('branch_id', $branch->id)
-                    //     ->where('tipo_documento', $data['tipo_documento'])
-                    //     ->where('serie', strtoupper($data['serie']))
-                    //     ->exists();
-
-                    // if ($exists) {
-                    //     $errors[] = [
-                    //         'index' => $index,
-                    //         'error' => "Ya existe correlativo para tipo {$data['tipo_documento']} serie {$data['serie']}"
-                    //     ];
-                    //     continue;
-                    // }
 
                     $correlative = Correlative::create([
                         'branch_id' => $branch->id,
                         'tipo_documento' => $data['tipo_documento'],
                         'serie' => strtoupper($data['serie']),
-                        'correlativo_actual' => $data['correlativo_inicial'] ?? 0
+                        'correlativo_actual' => $data['correlativo_inicial'] ?? 0,
+                        'activo' => $data['activo'] ?? true
                     ]);
 
                     $created[] = [
