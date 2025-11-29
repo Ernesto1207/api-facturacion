@@ -80,7 +80,7 @@ class DailySummaryController extends Controller
                 'fecha_resumen' => 'required|date',
                 'ubl_version' => 'nullable|string|max:5',
                 'moneda' => 'nullable|string|in:PEN,USD',
-                
+
                 // Detalles del resumen
                 'detalles' => 'required|array|min:1',
                 'detalles.*.tipo_documento' => 'required|string|in:03,07,08',
@@ -98,12 +98,12 @@ class DailySummaryController extends Controller
                 'detalles.*.mto_isc' => 'nullable|numeric|min:0',
                 'detalles.*.mto_icbper' => 'nullable|numeric|min:0',
                 'detalles.*.mto_otros_cargos' => 'nullable|numeric|min:0',
-                
+
                 // Documento de referencia (para notas)
                 'detalles.*.documento_referencia' => 'nullable|array',
                 'detalles.*.documento_referencia.tipo_documento' => 'required_with:detalles.*.documento_referencia|string',
                 'detalles.*.documento_referencia.numero_documento' => 'required_with:detalles.*.documento_referencia|string',
-                
+
                 // Percepción (opcional)
                 'detalles.*.percepcion' => 'nullable|array',
                 'detalles.*.percepcion.cod_regimen' => 'required_with:detalles.*.percepcion|string|max:2',
@@ -111,7 +111,7 @@ class DailySummaryController extends Controller
                 'detalles.*.percepcion.monto_base' => 'required_with:detalles.*.percepcion|numeric|min:0',
                 'detalles.*.percepcion.monto' => 'required_with:detalles.*.percepcion|numeric|min:0',
                 'detalles.*.percepcion.monto_total' => 'required_with:detalles.*.percepcion|numeric|min:0',
-                
+
                 'usuario_creacion' => 'nullable|string|max:100',
             ]);
 
@@ -184,21 +184,21 @@ class DailySummaryController extends Controller
             } else {
                 $errorMessage = 'Error desconocido';
                 $errorCode = 'UNKNOWN';
-                
+
                 if (is_object($result['error'])) {
                     if (method_exists($result['error'], 'getMessage')) {
                         $errorMessage = $result['error']->getMessage();
                     } elseif (property_exists($result['error'], 'message')) {
                         $errorMessage = $result['error']->message;
                     }
-                    
+
                     if (method_exists($result['error'], 'getCode')) {
                         $errorCode = $result['error']->getCode();
                     } elseif (property_exists($result['error'], 'code')) {
                         $errorCode = $result['error']->code;
                     }
                 }
-                
+
                 return response()->json([
                     'success' => false,
                     'data' => $result['document'],
@@ -256,16 +256,16 @@ class DailySummaryController extends Controller
     {
         try {
             $summary = DailySummary::findOrFail($id);
-            
+
             $download = $this->fileService->downloadXml($summary);
-            
+
             if (!$download) {
                 return response()->json([
                     'success' => false,
                     'message' => 'XML no encontrado'
                 ], 404);
             }
-            
+
             return $download;
 
         } catch (\Exception $e) {
@@ -281,16 +281,16 @@ class DailySummaryController extends Controller
     {
         try {
             $summary = DailySummary::findOrFail($id);
-            
+
             $download = $this->fileService->downloadCdr($summary);
-            
+
             if (!$download) {
                 return response()->json([
                     'success' => false,
                     'message' => 'CDR no encontrado'
                 ], 404);
             }
-            
+
             return $download;
 
         } catch (\Exception $e) {
@@ -306,16 +306,16 @@ class DailySummaryController extends Controller
     {
         try {
             $summary = DailySummary::findOrFail($id);
-            
+
             $download = $this->fileService->downloadPdf($summary);
-            
+
             if (!$download) {
                 return response()->json([
                     'success' => false,
                     'message' => 'PDF no encontrado'
                 ], 404);
             }
-            
+
             return $download;
 
         } catch (\Exception $e) {
@@ -323,7 +323,7 @@ class DailySummaryController extends Controller
                 'success' => false,
                 'message' => 'Error al descargar PDF',
                 'error' => $e->getMessage()
-            ], 500);
+            ], 404);
         }
     }
 

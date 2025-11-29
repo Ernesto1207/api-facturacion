@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Exception;
 
 class CorrelativeController extends Controller
@@ -34,23 +35,23 @@ class CorrelativeController extends Controller
     {
         try {
             $correlatives = $branch->correlatives()
-                                  ->orderBy('tipo_documento')
-                                  ->orderBy('serie')
-                                  ->get()
-                                  ->map(function ($correlative) {
-                                      return [
-                                          'id' => $correlative->id,
-                                          'branch_id' => $correlative->branch_id,
-                                          'tipo_documento' => $correlative->tipo_documento,
-                                          'tipo_documento_nombre' => self::TIPOS_DOCUMENTO[$correlative->tipo_documento] ?? 'Desconocido',
-                                          'serie' => $correlative->serie,
-                                          'correlativo_actual' => $correlative->correlativo_actual,
-                                          'numero_completo' => $correlative->numero_completo,
-                                          'proximo_numero' => $correlative->serie . '-' . str_pad($correlative->correlativo_actual + 1, 6, '0', STR_PAD_LEFT),
-                                          'created_at' => $correlative->created_at,
-                                          'updated_at' => $correlative->updated_at
-                                      ];
-                                  });
+                ->orderBy('tipo_documento')
+                ->orderBy('serie')
+                ->get()
+                ->map(function ($correlative) {
+                    return [
+                        'id' => $correlative->id,
+                        'branch_id' => $correlative->branch_id,
+                        'tipo_documento' => $correlative->tipo_documento,
+                        'tipo_documento_nombre' => self::TIPOS_DOCUMENTO[$correlative->tipo_documento] ?? 'Desconocido',
+                        'serie' => $correlative->serie,
+                        'correlativo_actual' => $correlative->correlativo_actual,
+                        'numero_completo' => $correlative->numero_completo,
+                        'proximo_numero' => $correlative->serie . '-' . str_pad($correlative->correlativo_actual + 1, 6, '0', STR_PAD_LEFT),
+                        'created_at' => $correlative->created_at,
+                        'updated_at' => $correlative->updated_at
+                    ];
+                });
 
             return response()->json([
                 'success' => true,
@@ -68,7 +69,6 @@ class CorrelativeController extends Controller
                     'tipos_disponibles' => self::TIPOS_DOCUMENTO
                 ]
             ]);
-
         } catch (Exception $e) {
             Log::error("Error al listar correlativos", [
                 'branch_id' => $branch->id,
@@ -104,9 +104,9 @@ class CorrelativeController extends Controller
 
             // Verificar que no exista la combinación sucursal + tipo + serie
             $existingCorrelative = Correlative::where('branch_id', $branch->id)
-                                             ->where('tipo_documento', $request->tipo_documento)
-                                             ->where('serie', $request->serie)
-                                             ->first();
+                ->where('tipo_documento', $request->tipo_documento)
+                ->where('serie', $request->serie)
+                ->first();
 
             if ($existingCorrelative) {
                 return response()->json([
@@ -143,7 +143,6 @@ class CorrelativeController extends Controller
                     'proximo_numero' => $correlative->serie . '-' . str_pad($correlative->correlativo_actual + 1, 6, '0', STR_PAD_LEFT)
                 ]
             ], 201);
-
         } catch (Exception $e) {
             Log::error("Error al crear correlativo", [
                 'branch_id' => $branch->id,
@@ -188,10 +187,10 @@ class CorrelativeController extends Controller
 
             // Verificar que no exista otra combinación igual (excluyendo el actual)
             $existingCorrelative = Correlative::where('branch_id', $branch->id)
-                                             ->where('tipo_documento', $request->tipo_documento)
-                                             ->where('serie', $request->serie)
-                                             ->where('id', '!=', $correlative->id)
-                                             ->first();
+                ->where('tipo_documento', $request->tipo_documento)
+                ->where('serie', $request->serie)
+                ->where('id', '!=', $correlative->id)
+                ->first();
 
             if ($existingCorrelative) {
                 return response()->json([
@@ -226,7 +225,6 @@ class CorrelativeController extends Controller
                     'proximo_numero' => $correlative->serie . '-' . str_pad($correlative->correlativo_actual + 1, 6, '0', STR_PAD_LEFT)
                 ]
             ]);
-
         } catch (Exception $e) {
             Log::error("Error al actualizar correlativo", [
                 'correlative_id' => $correlative->id,
@@ -277,7 +275,6 @@ class CorrelativeController extends Controller
                 'success' => true,
                 'message' => 'Correlativo eliminado exitosamente'
             ]);
-
         } catch (Exception $e) {
             Log::error("Error al eliminar correlativo", [
                 'correlative_id' => $correlative->id,
@@ -301,7 +298,25 @@ class CorrelativeController extends Controller
             $validator = Validator::make($request->all(), [
                 'correlativos' => 'required|array|min:1',
                 'correlativos.*.tipo_documento' => 'required|string|max:2|in:' . implode(',', array_keys(self::TIPOS_DOCUMENTO)),
-                'correlativos.*.serie' => 'required|string|max:4|regex:/^[A-Z0-9]+$/',
+                'correlativos.*.serie' => [
+                    'required',
+                    'string',
+                    'max:4',
+                    'regex:/^[A-Z0-9]+$/',
+                    function ($attribute, $value, $fail) use ($branch, $request) {
+                        $index = explode('.', $attribute)[1];
+                        $tipoDocumento = $request->input("correlativos.{$index}.tipo_documento");
+                        $exists = Correlative::query()
+                            ->where('tipo_documento', $tipoDocumento)
+                            ->where('serie', strtoupper($value))
+                            ->where('branch_id', '!=', $branch->id)
+                            ->exists();
+
+                        if ($exists) {
+                            $fail("La serie '{$value}' ({$tipoDocumento}) ya está en uso por otra sucursal de tu empresa.");
+                        }
+                    },
+                ],
                 'correlativos.*.correlativo_inicial' => 'integer|min:0|max:99999999'
             ]);
 
@@ -319,18 +334,18 @@ class CorrelativeController extends Controller
             foreach ($request->correlativos as $index => $data) {
                 try {
                     // Verificar que no exista la combinación
-                    $exists = Correlative::where('branch_id', $branch->id)
-                                        ->where('tipo_documento', $data['tipo_documento'])
-                                        ->where('serie', strtoupper($data['serie']))
-                                        ->exists();
+                    // $exists = Correlative::where('branch_id', $branch->id)
+                    //     ->where('tipo_documento', $data['tipo_documento'])
+                    //     ->where('serie', strtoupper($data['serie']))
+                    //     ->exists();
 
-                    if ($exists) {
-                        $errors[] = [
-                            'index' => $index,
-                            'error' => "Ya existe correlativo para tipo {$data['tipo_documento']} serie {$data['serie']}"
-                        ];
-                        continue;
-                    }
+                    // if ($exists) {
+                    //     $errors[] = [
+                    //         'index' => $index,
+                    //         'error' => "Ya existe correlativo para tipo {$data['tipo_documento']} serie {$data['serie']}"
+                    //     ];
+                    //     continue;
+                    // }
 
                     $correlative = Correlative::create([
                         'branch_id' => $branch->id,
@@ -347,7 +362,6 @@ class CorrelativeController extends Controller
                         'correlativo_actual' => $correlative->correlativo_actual,
                         'numero_completo' => $correlative->numero_completo
                     ];
-
                 } catch (Exception $e) {
                     $errors[] = [
                         'index' => $index,
@@ -375,7 +389,6 @@ class CorrelativeController extends Controller
                     'total_requested' => count($request->correlativos)
                 ]
             ]);
-
         } catch (Exception $e) {
             Log::error("Error al crear correlativos por lote", [
                 'branch_id' => $branch->id,
@@ -426,7 +439,6 @@ class CorrelativeController extends Controller
                     'proximo_numero' => $correlative->serie . '-' . str_pad($correlative->correlativo_actual + 1, 6, '0', STR_PAD_LEFT)
                 ]
             ]);
-
         } catch (Exception $e) {
             Log::error("Error al incrementar correlativo", [
                 'correlative_id' => $correlative->id,
