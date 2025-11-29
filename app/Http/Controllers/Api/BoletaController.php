@@ -38,7 +38,7 @@ class BoletaController extends Controller
         try {
             $query = Boleta::with(['company', 'branch', 'client']);
             $this->applyFilters($query, $request);
-            
+
             $perPage = $request->get('per_page', 15);
             $boletas = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
@@ -47,7 +47,6 @@ class BoletaController extends Controller
                 'data' => $boletas->items(),
                 'pagination' => $this->getPaginationData($boletas)
             ]);
-
         } catch (Exception $e) {
             return $this->errorResponse('Error al listar boletas', $e);
         }
@@ -67,7 +66,6 @@ class BoletaController extends Controller
                 'data' => $boleta->load(['company', 'branch', 'client']),
                 'message' => 'Boleta creada correctamente'
             ], 201);
-
         } catch (Exception $e) {
             return $this->errorResponse('Error al crear la boleta', $e);
         }
@@ -80,7 +78,7 @@ class BoletaController extends Controller
     {
         try {
             $boleta = Boleta::with(['company', 'branch', 'client'])->findOrFail($id);
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $boleta
@@ -97,7 +95,7 @@ class BoletaController extends Controller
     {
         try {
             $boleta = Boleta::with(['company', 'branch', 'client'])->findOrFail($id);
-            
+
             if ($boleta->estado_sunat === 'ACEPTADO') {
                 return response()->json([
                     'success' => false,
@@ -106,7 +104,7 @@ class BoletaController extends Controller
             }
 
             $result = $this->documentService->sendToSunat($boleta, 'boleta');
-            
+
             if ($result['success']) {
                 return response()->json([
                     'success' => true,
@@ -116,7 +114,6 @@ class BoletaController extends Controller
             }
 
             return $this->handleSunatError($result);
-
         } catch (Exception $e) {
             return $this->errorResponse('Error interno al enviar a SUNAT', $e);
         }
@@ -129,7 +126,7 @@ class BoletaController extends Controller
     {
         try {
             $boleta = Boleta::findOrFail($id);
-            
+
             if (!$this->fileService->fileExists($boleta->xml_path)) {
                 return $this->notFoundResponse('XML no encontrado');
             }
@@ -139,7 +136,6 @@ class BoletaController extends Controller
                 $boleta->numero_completo . '.xml',
                 ['Content-Type' => 'application/xml']
             );
-
         } catch (Exception $e) {
             return $this->errorResponse('Error al descargar XML', $e);
         }
@@ -152,7 +148,7 @@ class BoletaController extends Controller
     {
         try {
             $boleta = Boleta::findOrFail($id);
-            
+
             if (!$this->fileService->fileExists($boleta->cdr_path)) {
                 return $this->notFoundResponse('CDR no encontrado');
             }
@@ -162,7 +158,6 @@ class BoletaController extends Controller
                 'R-' . $boleta->numero_completo . '.zip',
                 ['Content-Type' => 'application/zip']
             );
-
         } catch (Exception $e) {
             return $this->errorResponse('Error al descargar CDR', $e);
         }
@@ -208,7 +203,6 @@ class BoletaController extends Controller
                 'data' => $summary->load(['company', 'branch', 'boletas']),
                 'message' => 'Resumen diario creado correctamente'
             ], 201);
-
         } catch (Exception $e) {
             return $this->errorResponse('Error al crear resumen diario', $e);
         }
@@ -246,7 +240,6 @@ class BoletaController extends Controller
                 'message' => 'Error al enviar resumen a SUNAT',
                 'error' => $result['error']
             ], 400);
-
         } catch (Exception $e) {
             return $this->errorResponse('Error interno al enviar resumen', $e);
         }
@@ -273,7 +266,6 @@ class BoletaController extends Controller
                 'success' => false,
                 'message' => 'Error al consultar estado: ' . ($result['error'] ?? 'Error desconocido')
             ], 400);
-
         } catch (Exception $e) {
             return $this->errorResponse('Error al consultar estado del resumen', $e);
         }
@@ -294,7 +286,6 @@ class BoletaController extends Controller
                 'total' => $boletas->count(),
                 'message' => 'Boletas pendientes obtenidas correctamente'
             ]);
-
         } catch (Exception $e) {
             return $this->errorResponse('Error al obtener boletas pendientes', $e);
         }

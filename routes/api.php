@@ -130,6 +130,8 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::apiResource('branches', BranchController::class);
     Route::post('/branches/{branch}/activate', [BranchController::class, 'activate']);
     Route::get('/companies/{company}/branches', [BranchController::class, 'getByCompany']);
+    Route::get('/branches/{branch}/', [BranchController::class, 'show']);
+    Route::post('/branches/{branch}/update', [BranchController::class, 'update']);
 
     // ========================
     // CLIENTES

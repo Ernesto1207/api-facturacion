@@ -59,7 +59,6 @@ class DailySummaryController extends Controller
                 'data' => $summaries,
                 'message' => 'Resúmenes diarios obtenidos correctamente'
             ]);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -123,14 +122,12 @@ class DailySummaryController extends Controller
                 'data' => $summary->load(['company', 'branch']),
                 'message' => 'Resumen diario creado correctamente'
             ], 201);
-
         } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Errores de validación',
                 'errors' => $e->errors()
             ], 422);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -150,7 +147,6 @@ class DailySummaryController extends Controller
                 'data' => $summary,
                 'message' => 'Resumen diario obtenido correctamente'
             ]);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -206,7 +202,6 @@ class DailySummaryController extends Controller
                     'error_code' => $errorCode
                 ], 400);
             }
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -242,7 +237,6 @@ class DailySummaryController extends Controller
                     'message' => 'Error al consultar estado: ' . ($result['error'] ?? 'Error desconocido')
                 ], 400);
             }
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -267,7 +261,6 @@ class DailySummaryController extends Controller
             }
 
             return $download;
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -292,7 +285,6 @@ class DailySummaryController extends Controller
             }
 
             return $download;
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -317,7 +309,6 @@ class DailySummaryController extends Controller
             }
 
             return $download;
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -336,10 +327,10 @@ class DailySummaryController extends Controller
             ]);
 
             $query = DailySummary::with(['company', 'branch', 'boletas'])
-                                 ->where('company_id', $request->company_id)
-                                 ->where('estado_proceso', 'ENVIADO')
-                                 ->where('estado_sunat', 'PROCESANDO')
-                                 ->whereNotNull('ticket');
+                ->where('company_id', $request->company_id)
+                ->where('estado_proceso', 'ENVIADO')
+                ->where('estado_sunat', 'PROCESANDO')
+                ->whereNotNull('ticket');
 
             if ($request->branch_id) {
                 $query->where('branch_id', $request->branch_id);
@@ -353,7 +344,6 @@ class DailySummaryController extends Controller
                 'total' => $pendingSummaries->count(),
                 'message' => 'Resúmenes pendientes obtenidos correctamente'
             ]);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -372,10 +362,10 @@ class DailySummaryController extends Controller
             ]);
 
             $query = DailySummary::with(['company', 'branch'])
-                                 ->where('company_id', $request->company_id)
-                                 ->where('estado_proceso', 'ENVIADO')
-                                 ->where('estado_sunat', 'PROCESANDO')
-                                 ->whereNotNull('ticket');
+                ->where('company_id', $request->company_id)
+                ->where('estado_proceso', 'ENVIADO')
+                ->where('estado_sunat', 'PROCESANDO')
+                ->whereNotNull('ticket');
 
             if ($request->branch_id) {
                 $query->where('branch_id', $request->branch_id);
@@ -401,7 +391,6 @@ class DailySummaryController extends Controller
                 'total_processed' => count($results),
                 'message' => 'Consulta masiva completada'
             ]);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
