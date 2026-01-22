@@ -8,15 +8,15 @@ services:
     restart: unless-stopped
     working_dir: /var/www
     ports:
-      - "8000:8000"
+      - "8000"
     environment:
       # Aquí sobreescribimos las variables del .env para Docker
       DB_CONNECTION: mysql
       DB_HOST: db  # IMPORTANTE: En Docker, el host es el nombre del servicio, no 127.0.0.1
       DB_PORT: 3306
       DB_DATABASE: facturacion_sunat
-      DB_USERNAME: tu_usuario
-      DB_PASSWORD: tu_password
+      DB_USERNAME: ernesto
+      DB_PASSWORD: ernesto318269.
     depends_on:
       - db
     networks:
@@ -29,9 +29,9 @@ services:
     restart: always
     environment:
       MYSQL_DATABASE: facturacion_sunat
-      MYSQL_USER: tu_usuario
-      MYSQL_PASSWORD: tu_password
-      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_USER: ernesto
+      MYSQL_PASSWORD: ernesto318269.
+      MYSQL_ROOT_PASSWORD: ernesto318269.
     ports:
       - "3306:3306" # Opcional: solo si quieres acceder a la BD desde tu PC (HeidiSQL, DBeaver)
     volumes:
