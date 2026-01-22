@@ -1,19 +1,46 @@
 #!/bin/bash
 
-# Activa la salida inmediata si un comando falla.
+# Detener el script si hay errores
 set -e
 
-# Esperamos un momento para asegurar que la base de datos esté lista si se inicia al mismo tiempo.
-# En un entorno real, se podrían usar herramientas más avanzadas como wait-for-it.sh,
-# pero un sleep simple suele ser suficiente.
-echo "Esperando a la base de datos..."
-sleep 5
+echo "--- Iniciando configuración de entorno ---"
 
-# Ejecuta las migraciones de la base de datos.
-# El flag --force es importante para que se ejecute sin preguntar en entornos automatizados.
+# 1. Copiar .env.example a .env si no existe
+if [ ! -f .env ]; then
+    echo "El archivo .env no existe. Copiando desde .env.example..."
+    cp .env.example .env
+else
+    echo "El archivo .env ya existe."
+fi
+
+# 2. Instalar dependencias si la carpeta vendor no existe (por seguridad)
+if [ ! -d "vendor" ]; then
+    echo "Instalando dependencias de Composer..."
+    composer install --no-interaction --no-plugins --no-scripts --prefer-dist
+fi
+
+# 3. Generar la APP_KEY si no está configurada
+if grep -q "APP_KEY=" .env && [ -z "$(grep "APP_KEY=" .env | cut -d '=' -f 2)" ]; then
+    echo "Generando Application Key..."
+    php artisan key:generate
+elif ! grep -q "APP_KEY=" .env; then
+     # Si la linea ni siquiera existe
+    echo "Generando Application Key..."
+    php artisan key:generate
+else
+    echo "La Application Key ya está configurada."
+fi
+
+# 4. Esperar a la base de datos
+echo "Esperando a que la base de datos esté lista..."
+# Un sleep simple suele funcionar, pero lo ideal es un loop de espera
+sleep 10 
+
+# 5. Ejecutar migraciones
 echo "Ejecutando migraciones..."
 php artisan migrate --force
 
-# Finalmente, ejecuta el comando principal que se pasó al contenedor (el CMD del Dockerfile).
-# Esto iniciará "php artisan serve".
+echo "--- Configuración terminada. Iniciando servidor ---"
+
+# 6. Ejecutar el comando pasado al contenedor (php artisan serve)
 exec "$@"
