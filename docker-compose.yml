@@ -1,5 +1,4 @@
 services:
-  # Servicio de la Aplicación Laravel
   app:
     build:
       context: .
@@ -7,12 +6,18 @@ services:
     container_name: facturacion_app
     restart: unless-stopped
     working_dir: /var/www
-    ports:
-      - "8081:8000"
+    # ELIMINA la sección 'ports' si quieres que Coolify maneje el dominio.
+    # Coolify detectará el EXPOSE del Dockerfile o la config en la UI.
+    expose:
+      - "8000"
     environment:
-      # Aquí sobreescribimos las variables del .env para Docker
+      APP_URL: ${APP_URL} # Coolify inyectará esto automáticamente
+      APP_ENV: production
+      APP_DEBUG: "false"
+      
+      # Conexión a BD (Como están en la misma red 'facturacion_net', usa el nombre del servicio)
       DB_CONNECTION: mysql
-      DB_HOST: db  # IMPORTANTE: En Docker, el host es el nombre del servicio, no 127.0.0.1
+      DB_HOST: db
       DB_PORT: 3306
       DB_DATABASE: facturacion_sunat
       DB_USERNAME: ernesto
@@ -22,7 +27,6 @@ services:
     networks:
       - facturacion_net
 
-  # Servicio de Base de Datos MySQL
   db:
     image: mysql:8.0
     container_name: facturacion_db
@@ -32,10 +36,8 @@ services:
       MYSQL_USER: ernesto
       MYSQL_PASSWORD: ernesto318269.
       MYSQL_ROOT_PASSWORD: ernesto318269.
-    ports:
-      - "3306:3306" # Opcional: solo si quieres acceder a la BD desde tu PC (HeidiSQL, DBeaver)
     volumes:
-      - db_data:/var/lib/mysql # Persistencia de datos para que no se borren al apagar
+      - db_data:/var/lib/mysql
     networks:
       - facturacion_net
 
